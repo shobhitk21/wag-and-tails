@@ -1,0 +1,20 @@
+{
+  "name": "@wag/ui-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./styles.css": "./src/styles.css",
+    "./portal.css": "./src/portal.css"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "dependencies": {
+    "@wag/api-client": "1.0.0"
+  }
+}

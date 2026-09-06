@@ -1,0 +1,105 @@
+/* styles.css is the prototype's file, ported unchanged — it draws the desktop
+   shell inside a simulated browser frame (fixed 768px tall, rounded, shadowed).
+   A real portal fills the window instead, so these few rules re-anchor the same
+   shell to the viewport. Nothing else about the design system is touched. */
+
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--canvas); }
+
+.portal {
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+/* Sign-in fills the window with no sidebar. */
+.portal--bare { grid-template-columns: 1fr; }
+
+@media (max-width: 1180px) {
+  .portal { grid-template-columns: 200px 1fr; }
+}
+
+@media (max-width: 860px) {
+  .portal { grid-template-columns: 1fr; }
+  .portal > .side {
+    position: fixed; inset: 0 auto 0 0; width: 236px; z-index: 40;
+    transform: translateX(-100%); transition: transform .2s ease;
+  }
+  .portal.is-navopen > .side { transform: none; }
+  .portal.is-navopen::after {
+    content: ''; position: fixed; inset: 0; background: rgba(27, 10, 3, .45); z-index: 30;
+  }
+  .navtoggle { display: inline-flex; }
+}
+
+.navtoggle { display: none; }
+
+/* The login split panel sizes itself to the viewport rather than the frame. */
+.signin { display: grid; grid-template-columns: 1fr 1fr; height: 100dvh; }
+.signin__brand {
+  background: var(--brand-700); color: #fff; padding: 56px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.signin__form {
+  padding: 56px; display: flex; flex-direction: column; justify-content: center;
+  max-width: 420px; width: 100%;
+}
+@media (max-width: 860px) {
+  .signin { grid-template-columns: 1fr; }
+  .signin__brand { display: none; }
+  .signin__form { max-width: none; padding: 32px 24px; }
+}
+
+/* Loading and error states, shared by every screen that fetches. */
+.loadwrap { padding: 48px; display: grid; place-items: center; }
+.spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2.5px solid var(--brand-200); border-top-color: var(--brand-700);
+  animation: portalspin .7s linear infinite;
+}
+@keyframes portalspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+.errbox {
+  border: 1px solid var(--danger-600); background: var(--danger-50);
+  border-radius: 14px; padding: 16px; font-size: 13px; color: var(--ink);
+}
+
+/* Rows in a table that are not navigable should not claim to be. */
+.table tbody tr.is-static { cursor: default; }
+.table tbody tr.is-static:hover { background: transparent; }
+
+/* Toast, ported from the phone shell so confirmations read the same. */
+.wtoast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  background: var(--brand-800); color: #fff; padding: 12px 18px; border-radius: 12px;
+  font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 9px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.3); z-index: 60; max-width: min(90vw, 460px);
+}
+
+/* styles.css applies a global accent-orange :focus-visible ring to every
+   focusable element (its own accessibility rule — real keyboard-focus
+   indication, not a bug). Text inputs already show focus via their parent
+   .field's border/glow (.field:focus-within), so the extra ring around
+   .field__input itself is a redundant, clashing outline rather than added
+   clarity. Suppressed only here; .field:focus-within still does the job. */
+.field__input:focus-visible { outline: none; }
+
+/* The prototype drew every nav item as a <button>, which browsers never
+   underline. These consoles use react-router <NavLink>, so the same markup
+   comes out as an <a> and picks up the default underline — a side effect of
+   the port, not a design decision. Cleared here for links that are styled as
+   controls; genuine inline text links keep their underline. */
+a.navitem,
+a.rowitem,
+a.wbtn,
+a.btn,
+a.filterchip,
+a.tabs__t,
+a.side__brand,
+a.linkbtn {
+  text-decoration: none;
+}

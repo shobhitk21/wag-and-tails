@@ -1,0 +1,28 @@
+{
+  "name": "wag-and-tails",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Wag & Tails \u2014 Express + PostgreSQL backend with the staff and admin web portals.",
+  "workspaces": [
+    "backend",
+    "packages/*",
+    "web/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:migrate": "npm run migrate -w backend",
+    "db:seed": "npm run seed -w backend",
+    "db:reset": "npm run migrate -w backend && npm run seed -w backend",
+    "dev:api": "npm run dev -w backend",
+    "dev:staff": "npm run dev -w staff-portal",
+    "dev:admin": "npm run dev -w admin-portal",
+    "build": "npm run build -w staff-portal && npm run build -w admin-portal",
+    "test:api": "npm run smoke -w backend",
+    "test:ui": "npm run uicheck -w backend",
+    "dev:customer": "npm start -w customer-app",
+    "dev:partner": "npm start -w partner-app"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

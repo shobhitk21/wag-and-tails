@@ -1,0 +1,12 @@
+{
+  "name": "@wag/features-store",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.jsx",
+  "exports": { ".": "./src/index.jsx" },
+  "dependencies": {
+    "@wag/api-client": "1.0.0",
+    "@wag/theme": "1.0.0",
+    "@wag/ui-native": "1.0.0"
+  }
+}

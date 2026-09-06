@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Wag & Tails",
+    "slug": "wag-customer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FBF7F2",
+    "splash": {
+      "backgroundColor": "#4A1E0B",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#4A1E0B"
+      }
+    },
+    "plugins": [],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
