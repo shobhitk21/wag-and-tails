@@ -17,7 +17,8 @@ const NAV = [
     group: 'Operations',
     items: [
       { to: '/', label: 'Dashboard', ico: 'home', end: true },
-      { to: '/bookings/new', label: 'New booking', ico: 'plus' },
+      /* No "New booking" item here — it's an action button on the Bookings
+         screen and the dashboard, not a destination of its own. */
       { to: '/bookings', label: 'Bookings', ico: 'cal' },
       { to: '/orders', label: 'Store orders', ico: 'bag' }
     ]
@@ -67,7 +68,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Dashboard renderPage={renderPage} />} />
       <Route path="/bookings/new" element={<NewBooking renderPage={renderPage} />} />
-      <Route path="/bookings" element={<BookingsScreen renderPage={renderPage} />} />
+      <Route path="/bookings" element={<BookingsScreen renderPage={renderPage} canCreate />} />
       <Route path="/bookings/:id" element={<BookingScreen renderPage={renderPage} />} />
       <Route path="/orders" element={<OrdersScreen renderPage={renderPage} />} />
       <Route path="/orders/:id" element={<OrderScreen renderPage={renderPage} />} />

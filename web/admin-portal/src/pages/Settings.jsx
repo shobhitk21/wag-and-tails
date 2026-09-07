@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '@wag/api-client';
 import {
   useApi, useToast, Loading, ErrorBox, Toast, WCard, Field, StatusDot,
-  Banner, WButton, Ico
+  Banner, WButton, Ico, useConfirm, downloadCsv
 } from '@wag/ui-web';
 
 const GROUP_TITLES = { business: 'Business', commission: 'Commission', policy: 'Policy' };
@@ -12,9 +12,55 @@ const GROUP_TITLES = { business: 'Business', commission: 'Commission', policy: '
    payout figure in the console. */
 export default function Settings({ renderPage }) {
   const [toast, setToast] = useToast();
+  const [confirm, confirmDialog] = useConfirm();
   const { data, error, loading, reload } = useApi(() => api.admin.settings(), []);
   const [values, setValues] = useState({});
   const [busy, setBusy] = useState(false);
+
+  /* Four files rather than one archive: a zip would need a bundler here and
+     the point of the button is to get the rows out, not to package them. */
+  async function exportAll() {
+    setBusy(true);
+    try {
+      for (const dataset of ['bookings', 'orders', 'customers', 'partners']) {
+        await downloadCsv(dataset);
+      }
+      setToast('Four CSVs downloaded: bookings, orders, customers, partners.');
+    } catch (err) {
+      setToast(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* Reads the current state from the settings themselves, so the button
+     says what it will actually do rather than assuming bookings are live. */
+  const paused = (data?.groups?.policy ?? [])
+    .find((row) => row.key === 'bookings_paused')?.value === 'true';
+
+  async function togglePause() {
+    const ok = await confirm({
+      title: paused ? 'Start taking bookings again?' : 'Pause all new bookings?',
+      body: paused
+        ? 'Customers will be able to book in the app again straight away.'
+        : 'Customers will not be able to book anything new until this is switched back on. '
+          + 'Bookings already in the diary are unaffected.',
+      confirmLabel: paused ? 'Resume bookings' : 'Pause bookings',
+      tone: paused ? 'primary' : 'danger'
+    });
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      await api.admin.pauseBookings(!paused);
+      setToast(paused ? 'Bookings are open again.' : 'New bookings are paused.');
+      reload();
+    } catch (err) {
+      setToast(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!data) return;
@@ -95,17 +141,18 @@ export default function Settings({ renderPage }) {
 
         <WCard title="Danger zone">
           <div className="col g2">
-            <WButton style={{ justifyContent: 'flex-start' }} onClick={() => setToast('Export is not wired yet.')}>
+            <WButton style={{ justifyContent: 'flex-start' }} disabled={busy} onClick={exportAll}>
               <Ico name="doc" size={15} /> Export all data
             </WButton>
-            <WButton variant="danger" style={{ justifyContent: 'flex-start' }}
-              onClick={() => setToast('Pausing all bookings is not wired yet.')}>
-              <Ico name="alert" size={15} /> Pause all bookings
+            <WButton variant={paused ? 'primary' : 'danger'} style={{ justifyContent: 'flex-start' }}
+              disabled={busy} onClick={togglePause}>
+              <Ico name="alert" size={15} /> {paused ? 'Resume all bookings' : 'Pause all bookings'}
             </WButton>
           </div>
         </WCard>
       </div>
       <Toast message={toast} />
+      {confirmDialog}
     </>
   );
 

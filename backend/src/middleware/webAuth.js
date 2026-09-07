@@ -4,14 +4,22 @@ import { verifyToken } from '../utils/jwt.js';
 /* Real auth for the two web consoles: verifies a JWT from
    `Authorization: Bearer <token>`, then re-reads the account so a
    deactivated or since-changed-role user can't keep using an old token
-   until it expires. Replaces the old x-demo-user trust-the-header approach —
-   the mobile apps' phone+OTP session (middleware/appUser.js) is untouched. */
+   until it expires. Replaces the old x-demo-user trust-the-header approach.
+   The apps authenticate the same way now — see middleware/appUser.js. */
+const STAFF_ROLES = new Set(['bookings_staff', 'support', 'super_admin']);
+
 export async function webAuth(req, _res, next) {
   const header = req.get('authorization');
   if (!header?.startsWith('Bearer ')) return next();
 
   const payload = verifyToken(header.slice(7));
   if (!payload?.sub) return next();
+
+  /* Both consoles and apps present a Bearer token on the same header, and this
+     middleware runs before appUser. A customer token carries a TEXT id like
+     'C1041', which would blow up the integer lookup below — so only staff
+     roles get past here, and the app token falls through to appUser. */
+  if (!STAFF_ROLES.has(payload.role)) return next();
 
   try {
     const user = await one(
@@ -39,3 +47,7 @@ export function requireRole(...roles) {
 }
 
 export const requireAdmin = requireRole('super_admin');
+
+/* Any signed-in staff account, whatever the role. Mounted on the console
+   routers so a new route is guarded by default. */
+export const requireStaff = requireRole();

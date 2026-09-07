@@ -2,7 +2,7 @@ import { useState } from 'react';
 import api from '@wag/api-client';
 import {
   useApi, useToast, Loading, ErrorBox, Toast, WCard, WTable, KpiCard,
-  StatusDot, WButton, EmptyState, inr
+  StatusDot, WButton, EmptyState, useConfirm, inr
 } from '@wag/ui-web';
 
 /* Payouts. Gross comes from each partner's pending balance; the fee and net
@@ -11,12 +11,22 @@ import {
 export default function Payouts({ renderPage }) {
   const [toast, setToast] = useToast();
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const { data, error, loading, reload } = useApi(() => api.admin.payouts(), []);
 
   if (loading) return renderPage({ title: 'Payouts', body: <Loading /> });
   if (error) return renderPage({ title: 'Payouts', body: <ErrorBox error={error} onRetry={reload} /> });
 
-  async function release(kind, label) {
+  async function release(kind, label, amount, count) {
+    const ok = await confirm({
+      title: kind === 'all' ? `Release all payouts — ${inr(amount)}?` : `Release the ${label}?`,
+      body: `${inr(amount)} across ${count} partner${count === 1 ? '' : 's'} will be marked `
+        + 'as paid and their pending balance cleared. This cannot be undone from here.',
+      confirmLabel: 'Release',
+      tone: 'danger'
+    });
+    if (!ok) return;
+
     setBusy(true);
     try {
       const { released } = await api.admin.releasePayouts(kind);
@@ -56,7 +66,12 @@ export default function Payouts({ renderPage }) {
                 variant="primary"
                 sm
                 disabled={busy}
-                onClick={() => release(batch.kind.replace(/s$/, ''), `${batch.kind} batch`)}
+                onClick={() => release(
+                  batch.kind.replace(/s$/, ''),
+                  `${batch.kind} batch`,
+                  batch.rows.reduce((sum, r) => sum + r.gross, 0),
+                  batch.rows.length
+                )}
               >
                 Release batch
               </WButton>
@@ -81,6 +96,7 @@ export default function Payouts({ renderPage }) {
         ))
       )}
       <Toast message={toast} />
+      {confirmDialog}
     </>
   );
 
@@ -88,7 +104,16 @@ export default function Payouts({ renderPage }) {
     title: 'Payouts',
     sub: `${liveBatches.length} batch${liveBatches.length === 1 ? '' : 'es'} ready to release`,
     actions: data.total > 0 && (
-      <WButton variant="primary" disabled={busy} onClick={() => release('all', 'All payouts')}>
+      <WButton
+        variant="primary"
+        disabled={busy}
+        onClick={() => release(
+          'all',
+          'All payouts',
+          data.total,
+          data.batches.reduce((n, b) => n + b.rows.length, 0)
+        )}
+      >
         Release all · {data.totalLabel}
       </WButton>
     ),

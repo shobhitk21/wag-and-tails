@@ -425,11 +425,13 @@ export function StepBar({ step, total }) {
 }
 
 /* ---------- states ---------- */
+/* The platform spinner, matching the ring the two web consoles use, so
+   "working" looks the same on every surface. */
 export function Loading({ label }) {
   return (
-    <View style={{ padding: space[8], alignItems: 'center', gap: 12 }}>
-      <ActivityIndicator color={colors.brand[700]} />
-      {label ? <T.Xs>{label}</T.Xs> : null}
+    <View style={{ padding: space[8], alignItems: 'center', gap: 10 }}>
+      <ActivityIndicator size="large" color={colors.brand[700]} />
+      {label ? <Text style={{ ...type.xs, color: colors.ink[3] }}>{label}</Text> : null}
     </View>
   );
 }

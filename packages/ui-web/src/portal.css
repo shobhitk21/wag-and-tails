@@ -4,16 +4,33 @@
    shell to the viewport. Nothing else about the design system is touched. */
 
 html, body, #root { height: 100%; }
-body { margin: 0; background: var(--canvas); }
+
+/* styles.css centres the body with flex + 26px padding, because the prototype
+   floated a simulated device frame in the middle of the screen. A real console
+   fills the window, and leaving the centring on made the whole layout drift:
+   the grid's 1fr column sizes to its content, so every navigation changed the
+   total width and `justify-content: center` slid the sidebar sideways. */
+body {
+  margin: 0;
+  padding: 0;
+  display: block;
+  background: var(--canvas);
+}
+#root { display: block; }
 
 .portal {
   display: grid;
   grid-template-columns: 236px 1fr;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
   background: var(--canvas);
   overflow: hidden;
 }
+
+/* The main column must be allowed to shrink, or a wide table inside it pushes
+   the grid wider than the viewport and the sidebar drifts again. */
+.desk__main { min-width: 0; }
 
 /* Sign-in fills the window with no sidebar. */
 .portal--bare { grid-template-columns: 1fr; }
@@ -53,15 +70,56 @@ body { margin: 0; background: var(--canvas); }
   .signin__form { max-width: none; padding: 32px 24px; }
 }
 
-/* Loading and error states, shared by every screen that fetches. */
-.loadwrap { padding: 48px; display: grid; place-items: center; }
-.spinner {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 2.5px solid var(--brand-200); border-top-color: var(--brand-700);
-  animation: portalspin .7s linear infinite;
+/* Loading and error states, shared by every screen that fetches.
+
+   A plain ring on the brand colour. It carries no meaning of its own, which is
+   the point of a busy indicator: it should read as chrome and get out of the
+   way, not compete with the screen behind it. */
+.loadwrap { padding: 48px; display: grid; place-items: center; gap: 12px; }
+
+.wspin {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 3px solid var(--line, #E7DED5);
+  border-top-color: var(--brand-700, #7A3E12);
+  animation: wspin .7s linear infinite;
 }
-@keyframes portalspin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+@keyframes wspin { to { transform: rotate(360deg); } }
+
+/* The Build Book asks for prefers-reduced-motion to be respected: the ring
+   stops turning and simply sits there as a static "busy" mark. */
+@media (prefers-reduced-motion: reduce) {
+  .wspin { animation-duration: 2.4s; }
+}
+
+/* Confirmation dialog. Only ever in the DOM while open — see the note in
+   ConfirmDialog.jsx about the prototype's invisible click-swallowing layer. */
+.confirm-layer {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(27, 10, 3, .45);
+  animation: confirm-fade .12s ease-out;
+}
+.confirm {
+  width: 100%; max-width: 420px;
+  background: var(--surface); border-radius: 16px; padding: 22px;
+  box-shadow: 0 30px 70px rgba(0,0,0,.32);
+  animation: confirm-rise .14s ease-out;
+}
+.confirm__title {
+  font-family: var(--display); font-weight: 700; font-size: 17px;
+  letter-spacing: -.2px; color: var(--ink);
+}
+.confirm__body {
+  margin-top: 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink-3);
+}
+.confirm__foot {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;
+}
+@keyframes confirm-fade { from { opacity: 0; } }
+@keyframes confirm-rise { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .confirm-layer, .confirm { animation: none; }
+}
 
 .errbox {
   border: 1px solid var(--danger-600); background: var(--danger-50);
@@ -102,4 +160,42 @@ a.tabs__t,
 a.side__brand,
 a.linkbtn {
   text-decoration: none;
+}
+
+/* Form dialog. Reuses .confirm-layer / .confirm above; these are only the
+   pieces a form needs that a confirmation does not. Field styling itself comes
+   from the prototype's own .field / .formlabel, so a dialog input and an
+   input on a page are the same control. */
+.formgrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.formgrid > *:only-child,
+.formgrid__wide { grid-column: 1 / -1; }
+
+.formgrid select.field__input {
+  appearance: none;
+  background: transparent;
+  width: 100%;
+}
+
+.formcheck {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 2px; font-size: 13px; color: var(--ink-2); cursor: pointer;
+}
+.formcheck input { accent-color: var(--brand-700); width: 15px; height: 15px; }
+
+.formhint { margin-top: 5px; font-size: 11.5px; color: var(--ink-3); }
+.formhint.is-bad { color: var(--danger-600); }
+
+.formerror {
+  margin-top: 14px; padding: 10px 12px; border-radius: 10px;
+  background: var(--danger-50); border: 1px solid var(--danger-600);
+  font-size: 12.5px; color: var(--ink);
+}
+
+@media (max-width: 560px) {
+  .formgrid { grid-template-columns: 1fr; }
 }

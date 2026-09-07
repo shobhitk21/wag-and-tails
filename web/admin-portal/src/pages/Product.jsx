@@ -114,7 +114,7 @@ export default function Product({ renderPage }) {
           <WCard title="Image">
             <div className="gallery"><ProductSvg art={p.art} tone={p.tone} /></div>
             <WButton className="mt3" style={{ width: '100%', justifyContent: 'center' }}
-              onClick={() => setToast('Image upload is not wired yet.')}>
+              onClick={() => setToast('Product art is drawn in code, not uploaded — photo upload needs file storage this build does not have.')}>
               <Ico name="cam" size={15} /> Upload images
             </WButton>
           </WCard>

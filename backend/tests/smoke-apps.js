@@ -11,9 +11,38 @@ let pass = 0;
 let fail = 0;
 const failures = [];
 
+/* `as` is still written as "customer:C1041" for readability, but it is now
+   exchanged for a real signed token: the apps stopped trusting a plain
+   identity header when that turned out to be an authentication bypass.
+   Tokens are cached so one OTP round-trip covers every call for an account. */
+const tokens = new Map();
+
+async function tokenFor(as) {
+  if (tokens.has(as)) return tokens.get(as);
+  const [role, id] = as.split(':');
+
+  const list = await fetch(`${BASE}/api/app/auth/demo-accounts?role=${role}`).then((r) => r.json());
+  const account = list.accounts.find((a) => a.id === id);
+  if (!account) throw new Error(`no demo ${role} with id ${id}`);
+
+  const post = (path, body) => fetch(BASE + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then((r) => r.json());
+
+  await post('/api/app/auth/request-otp', { phone: account.phone, role });
+  const { token } = await post('/api/app/auth/verify-otp', {
+    phone: account.phone, code: list.code, role
+  });
+  if (!token) throw new Error(`could not sign in as ${as}`);
+  tokens.set(as, token);
+  return token;
+}
+
 async function call(path, { as, method = 'GET', body } = {}) {
   const headers = {};
-  if (as) headers['x-app-user'] = as;
+  if (as) headers.authorization = `Bearer ${await tokenFor(as)}`;
   if (body) headers['content-type'] = 'application/json';
   const res = await fetch(BASE + path, {
     method, headers, body: body ? JSON.stringify(body) : undefined
@@ -174,7 +203,16 @@ async function run() {
     return 'same sentence, one row';
   });
   await check('And the staff console shows it too', async () => {
-    const res = await fetch(`${BASE}/api/bookings/${groomId}`, { headers: { 'x-demo-user': 's1' } });
+    const login = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@wagandtails.in', password: 'Wagtails@123', surface: 'admin'
+      })
+    }).then((r) => r.json());
+    const res = await fetch(`${BASE}/api/bookings/${groomId}`, {
+      headers: { authorization: `Bearer ${login.token}` }
+    });
     const data = await res.json();
     expect(data.booking.care_note.includes('SMOKE TEST'), 'staff console does not show it');
     return 'three surfaces, one column';
@@ -375,10 +413,34 @@ async function run() {
     expect(status === 401, `expected 401, got ${status}`);
     return '401';
   });
+  /* Checked at the sign-in door rather than at one endpoint: a partner whose
+     application is still being reviewed should never get a token at all. */
   await check('A pending partner cannot sign in', async () => {
-    const { status } = await call('/api/app/partner/home', { as: 'partner:P77' });
-    expect(status === 403, `expected 403, got ${status}`);
-    return '403';
+    const login = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@wagandtails.in', password: 'Wagtails@123', surface: 'admin'
+      })
+    }).then((r) => r.json());
+
+    const { partner } = await fetch(`${BASE}/api/partners/P77`, {
+      headers: { authorization: `Bearer ${login.token}` }
+    }).then((r) => r.json());
+    expect(partner?.phone, 'no phone on P77 to try');
+    expect(partner.status !== 'Active', `P77 is ${partner.status}, expected pending`);
+
+    const post = (path, body) => fetch(BASE + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    await post('/api/app/auth/request-otp', { phone: partner.phone, role: 'partner' });
+    const res = await post('/api/app/auth/verify-otp', {
+      phone: partner.phone, code: '4321', role: 'partner'
+    });
+    expect(res.status === 403, `expected 403 at sign-in, got ${res.status}`);
+    return 'refused a token, not just an endpoint';
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

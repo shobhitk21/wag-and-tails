@@ -10,7 +10,16 @@
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "smoke": "node tests/smoke.js",
-    "uicheck": "node tests/uicheck.js"
+    "uicheck": "node tests/uicheck.js",
+    "smoke:admin": "node tests/smoke-admin.js",
+    "smoke:apps": "node tests/smoke-apps.js",
+    "uicheck:actions": "node tests/uicheck-actions.js",
+    "appcheck": "node tests/appcheck.js",
+    "appcheck:vaccines": "node tests/appcheck-vaccines.js",
+    "kill-port": "node scripts/kill-port.js",
+    "dev:fresh": "node scripts/kill-port.js && node --watch src/index.js",
+    "db": "node scripts/db.js",
+    "db:studio": "node scripts/db.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

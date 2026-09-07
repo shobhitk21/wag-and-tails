@@ -27,12 +27,18 @@ export function Screen({ children, onBrand = false, style, edges = ['top'] }) {
 export function AppBar({ title, subtitle, onBack, right, onBrand = false, border = true }) {
   const fg = onBrand ? colors.white : colors.ink[1];
   return (
+    /* The bar sits above the scroll view as a sibling, so it should never
+       move. On Android that isn't automatic: paint order there follows
+       elevation, not JSX order, so scrolling content can ride up over a
+       header that has none. zIndex covers iOS and web, elevation Android. */
     <View style={{
       flexDirection: 'row', alignItems: 'center', gap: space[3],
       paddingHorizontal: space[4], paddingVertical: 12,
       backgroundColor: onBrand ? colors.brand[700] : colors.canvas,
       borderBottomWidth: border && !onBrand ? 1 : 0,
-      borderBottomColor: colors.line
+      borderBottomColor: colors.line,
+      zIndex: 10,
+      elevation: 3
     }}>
       {onBack ? (
         <Pressable onPress={onBack} hitSlop={12} accessibilityLabel="Back" accessibilityRole="button"

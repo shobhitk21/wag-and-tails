@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LogoMark, Avatar } from './Brand.jsx';
 import { Ico } from './Icon.jsx';
+import { useConfirm } from './ConfirmDialog.jsx';
 
 export function WebShell({
   nav, badges = {}, subtitle, who, title, sub, actions,
@@ -12,6 +13,7 @@ export function WebShell({
 }) {
   const [navOpen, setNavOpen] = useState(false);
   const navigate = useNavigate();
+  const [confirm, confirmDialog] = useConfirm();
 
   return (
     <div className={`portal${navOpen ? ' is-navopen' : ''}`}>
@@ -55,7 +57,18 @@ export function WebShell({
               <span style={{ display: 'block', fontSize: 10.5, opacity: 0.55 }}>{who.role}</span>
             </span>
           </button>
-          <button className="navitem" onClick={onSignOut}>
+          <button
+            className="navitem"
+            onClick={async () => {
+              const ok = await confirm({
+                title: 'Sign out?',
+                body: 'You will need your email and password to get back in.',
+                confirmLabel: 'Sign out',
+                tone: 'danger'
+              });
+              if (ok) onSignOut?.();
+            }}
+          >
             <Ico name="logout" size={17} />
             <span>Sign out</span>
           </button>
@@ -85,15 +98,16 @@ export function WebShell({
         </div>
         <div className="desk__scroll">{children}</div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
 
 /* Shown while a screen's first fetch is in flight. */
-export function Loading() {
+export function Loading({ label = 'Loading' }) {
   return (
     <div className="loadwrap">
-      <div className="spinner" role="status" aria-label="Loading" />
+      <div className="wspin" role="status" aria-label={label} />
     </div>
   );
 }

@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '@wag/api-client';
 import {
-  useApi, useToast, Loading, ErrorBox, Toast, WCard, WTable, KpiCard,
-  StatusDot, WButton, Avatar, partnerArt, Ico, inr
+  useApi, useToast, Loading, ErrorBox, Toast, WCard, WTable, KpiCard, useConfirm,
+  StatusDot, WButton, Avatar, partnerArt, Ico, inr, useFormDialog
 } from '@wag/ui-web';
 
 export default function Partner({ renderPage }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [toast, setToast] = useToast();
+  const [openForm, formDialog] = useFormDialog();
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const { data, error, loading, reload } = useApi(() => api.partners.get(id), [id]);
 
   async function act(fn, message) {
@@ -30,6 +32,40 @@ export default function Partner({ renderPage }) {
   if (error) return renderPage({ title: 'Partner', body: <ErrorBox error={error} onRetry={reload} /> });
 
   const p = data.partner;
+
+  /* The area list is fetched when the dialog opens rather than with the page:
+     it is only needed for this one action, and typing an area free-hand would
+     let a partner sit in an area that does not exist — invisible to the
+     coverage counts and to every customer searching there. */
+  async function changeArea() {
+    let options = [];
+    try {
+      const { areas } = await api.admin.areas();
+      options = areas.map((a) => ({
+        value: a.name,
+        label: a.status === 'Live' ? a.name : `${a.name} · ${a.status.toLowerCase()}`
+      }));
+    } catch (err) {
+      setToast(err.message);
+      return;
+    }
+
+    const saved = await openForm({
+      title: `Change ${p.name}’s area`,
+      body: 'They will start seeing open jobs in the new area, and stop seeing them in the old one.',
+      submitLabel: 'Move partner',
+      fields: [
+        {
+          name: 'area', label: 'Service area', type: 'select', wide: true,
+          value: p.area ?? '', options
+        }
+      ],
+      submit: (v) => api.partners.update(p.id, v)
+    });
+    if (!saved) return;
+    setToast(`${p.name} now covers ${saved.partner.area}.`);
+    reload();
+  }
 
   const body = (
     <>
@@ -90,8 +126,8 @@ export default function Partner({ renderPage }) {
             <WButton style={{ justifyContent: 'flex-start' }} onClick={() => navigate('/payouts')}>
               <Ico name="wallet" size={15} /> View payouts
             </WButton>
-            <WButton style={{ justifyContent: 'flex-start' }}
-              onClick={() => setToast('Service area editing is not wired yet.')}>
+            <WButton style={{ justifyContent: 'flex-start' }} disabled={busy}
+              onClick={changeArea}>
               <Ico name="pin" size={15} /> Change service area
             </WButton>
             {p.status === 'Suspended' ? (
@@ -101,7 +137,17 @@ export default function Partner({ renderPage }) {
               </WButton>
             ) : (
               <WButton variant="danger" style={{ justifyContent: 'flex-start' }} disabled={busy}
-                onClick={() => act(() => api.partners.setStatus(p.id, 'Suspended'), `${p.name} suspended.`)}>
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: `Suspend ${p.name}?`,
+                    body: 'They stop seeing open jobs and cannot claim new work. '
+                      + `${p.pending_payout ? `Their pending ${inr(p.pending_payout)} is unaffected. ` : ''}`
+                      + 'You can reinstate them from this screen.',
+                    confirmLabel: 'Suspend',
+                    tone: 'danger'
+                  });
+                  if (ok) act(() => api.partners.setStatus(p.id, 'Suspended'), `${p.name} suspended.`);
+                }}>
                 <Ico name="close" size={15} /> Suspend partner
               </WButton>
             )}
@@ -109,6 +155,8 @@ export default function Partner({ renderPage }) {
         </WCard>
       </div>
       <Toast message={toast} />
+      {formDialog}
+      {confirmDialog}
     </>
   );
 

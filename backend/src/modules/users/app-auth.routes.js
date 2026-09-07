@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { many, one } from '../../db/pool.js';
 import { asyncHandler, httpError } from '../../middleware/error.js';
 import { validate } from '../../middleware/validate.js';
+import { signToken } from '../../utils/jwt.js';
+import {
+  issueRefreshToken, rotateRefreshToken, revokeRefreshToken, RefreshError
+} from '../../utils/tokens.js';
 
 const router = Router();
 
@@ -80,7 +84,66 @@ router.post(
       throw httpError(403, 'Your application is still being reviewed.');
     }
 
-    res.json({ user: { ...account, role } });
+    /* A verified OTP is what mints the session. Until this existed the apps
+       identified themselves with a plain `x-app-user: customer:C1041` header,
+       which anyone could set to any account — the token below is what closes
+       that. */
+    const token = signToken({ sub: account.id, role });
+    const refreshToken = await issueRefreshToken({
+      subjectType: role, subjectId: account.id, userAgent: req.get('user-agent')
+    });
+
+    res.json({ user: { ...account, role }, token, refreshToken });
+  })
+);
+
+/* POST /api/app/auth/refresh — same rotation the consoles use. */
+router.post(
+  '/refresh',
+  validate(z.object({ refreshToken: z.string().min(1) })),
+  asyncHandler(async (req, res) => {
+    let rotated;
+    try {
+      rotated = await rotateRefreshToken(req.body.refreshToken, {
+        userAgent: req.get('user-agent')
+      });
+    } catch (err) {
+      if (err instanceof RefreshError) throw httpError(401, err.message);
+      throw err;
+    }
+    const { subjectType: role, subjectId } = rotated;
+    if (role !== 'customer' && role !== 'partner') throw httpError(401, 'Sign in again.');
+
+    const account = role === 'customer'
+      ? await one(
+          `SELECT id, name, first_name, phone, email, area, wallet_balance, since_label
+           FROM customers WHERE id = $1`, [subjectId]
+        )
+      : await one(
+          `SELECT id, name, kind, phone, area, rating, jobs, status
+           FROM partners WHERE id = $1`, [subjectId]
+        );
+
+    if (!account) throw httpError(401, 'Sign in again.');
+    if (role === 'partner' && account.status !== 'Active') {
+      throw httpError(403, 'Your account is not active.');
+    }
+
+    res.json({
+      user: { ...account, role },
+      token: signToken({ sub: account.id, role }),
+      refreshToken: rotated.token
+    });
+  })
+);
+
+/* POST /api/app/auth/logout */
+router.post(
+  '/logout',
+  validate(z.object({ refreshToken: z.string().optional() })),
+  asyncHandler(async (req, res) => {
+    await revokeRefreshToken(req.body.refreshToken);
+    res.json({ ok: true });
   })
 );
 

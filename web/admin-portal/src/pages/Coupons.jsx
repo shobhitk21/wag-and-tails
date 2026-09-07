@@ -2,13 +2,36 @@ import { useState } from 'react';
 import api from '@wag/api-client';
 import {
   useApi, useToast, Loading, ErrorBox, Toast, WCard, WTable, StatusDot,
-  WButton, Ico
+  WButton, Ico, useFormDialog
 } from '@wag/ui-web';
 
 export default function Coupons({ renderPage }) {
   const [toast, setToast] = useToast();
   const [busy, setBusy] = useState(false);
+  const [openForm, formDialog] = useFormDialog();
   const { data, error, loading, reload } = useApi(() => api.catalogue.coupons(), []);
+
+  /* A new coupon is created switched off. Switching it on is the separate,
+     deliberate step the toggle in the table already does — so a typo in a
+     discount code is never live for the seconds between saving and reading. */
+  async function create() {
+    const made = await openForm({
+      title: 'New coupon',
+      body: 'It is saved switched off. Turn it on in the table when you are happy with it.',
+      submitLabel: 'Create coupon',
+      fields: [
+        { name: 'code', label: 'Code', placeholder: 'FIRST20', hint: 'Letters and numbers' },
+        { name: 'title', label: 'What it gives', placeholder: '20% off your first groom' },
+        { name: 'subtitle', label: 'Small print', placeholder: 'Up to ₹400 off', wide: true },
+        { name: 'appliesTo', label: 'Applies to', placeholder: 'All services' },
+        { name: 'expiresOn', label: 'Expires', placeholder: '31 Dec 2026' }
+      ],
+      submit: (v) => api.catalogue.createCoupon(v)
+    });
+    if (!made) return;
+    setToast(`${made.coupon.code} created — switch it on when you are ready.`);
+    reload();
+  }
 
   async function toggle(c) {
     setBusy(true);
@@ -52,6 +75,7 @@ export default function Coupons({ renderPage }) {
         </WTable>
       </WCard>
       <Toast message={toast} />
+      {formDialog}
     </>
   );
 
@@ -59,7 +83,7 @@ export default function Coupons({ renderPage }) {
     title: 'Offers & coupons',
     sub: data ? `${data.active} active` : undefined,
     actions: (
-      <WButton variant="primary" onClick={() => setToast('Creating coupons is not wired yet.')}>
+      <WButton variant="primary" onClick={create}>
         <Ico name="plus" size={16} /> New coupon
       </WButton>
     ),

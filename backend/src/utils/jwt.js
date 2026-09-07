@@ -15,10 +15,14 @@ if (!SECRET) {
 }
 const key = SECRET || 'dev-only-insecure-secret-change-me';
 
-const EXPIRES_IN = '7d';
+/* Short-lived on purpose. The access token cannot be revoked once issued, so
+   its lifetime is the window in which a leaked one is useful; the refresh
+   token (utils/tokens.js) is what carries the session, and that one lives in
+   the database and can be revoked. */
+const EXPIRES_IN = '15m';
 
 export function signToken(payload) {
-  return jwt.sign(payload, key, { expiresIn: EXPIRES_IN });
+  return jwt.sign({ ...payload, typ: 'access' }, key, { expiresIn: EXPIRES_IN });
 }
 
 /* Returns the decoded payload, or null if the token is missing, malformed,

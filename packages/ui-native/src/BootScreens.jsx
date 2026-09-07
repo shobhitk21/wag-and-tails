@@ -215,8 +215,8 @@ export function OtpScreen({ navigation, route, role }) {
     setBusy(true);
     setError(null);
     try {
-      const { user } = await appApi.auth.verifyOtp(phone, entered, role);
-      signIn(user);
+      const { user, token, refreshToken } = await appApi.auth.verifyOtp(phone, entered, role);
+      signIn(user, token, refreshToken);
     } catch (err) {
       setError(err.message);
       setBusy(false);

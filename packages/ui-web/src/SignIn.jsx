@@ -43,8 +43,8 @@ export function SignIn({ surface, onSignedIn }) {
     setBusy(true);
     setError(null);
     try {
-      const { user, token } = await api.auth.login(useEmail, usePassword, surface);
-      onSignedIn(user, token);
+      const { user, token, refreshToken } = await api.auth.login(useEmail, usePassword, surface);
+      onSignedIn(user, token, refreshToken);
     } catch (err) {
       setError(err.message);
       setBusy(false);

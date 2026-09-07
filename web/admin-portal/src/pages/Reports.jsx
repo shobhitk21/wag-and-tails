@@ -2,20 +2,38 @@ import { useState } from 'react';
 import api from '@wag/api-client';
 import {
   useApi, useToast, Loading, ErrorBox, Toast, WCard, WTable, KpiCard,
-  WButton, Chart, Donut, Banner, RatingChip, Pill, Ico, inr
+  WButton, Chart, Donut, Banner, RatingChip, Pill, Ico, inr, downloadCsv
 } from '@wag/ui-web';
 
 const TABS = ['Revenue', 'Bookings', 'Partners', 'Store'];
 
 /* Reports. The Revenue tab is the reporting snapshot; Bookings, Partners and
    Store aggregate the real tables, so those three grow as the business runs. */
+/* Each tab exports the rows behind it. The Revenue tab's chart is the
+   reporting snapshot rather than rows, so it exports the bookings those
+   figures summarise — there is nothing else underneath it to hand over. */
+const TAB_EXPORT = ['bookings', 'bookings', 'partners', 'orders'];
+
 export default function Reports({ renderPage }) {
   const [tab, setTab] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useToast();
   const { data, error, loading, reload } = useApi(() => api.admin.reports(), []);
 
   if (loading) return renderPage({ title: 'Reports', body: <Loading /> });
   if (error) return renderPage({ title: 'Reports', body: <ErrorBox error={error} onRetry={reload} /> });
+
+  async function exportTab() {
+    setBusy(true);
+    try {
+      const filename = await downloadCsv(TAB_EXPORT[tab]);
+      setToast(`${filename} downloaded.`);
+    } catch (err) {
+      setToast(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const { kpis, revenue, lines, channels, donutTotal, byStatus, byChannel, byPartner, byProduct } = data;
 
@@ -134,7 +152,7 @@ export default function Reports({ renderPage }) {
     title: 'Reports',
     sub: 'March – August 2026',
     actions: (
-      <WButton onClick={() => setToast('CSV export is not wired yet.')}>
+      <WButton disabled={busy} onClick={exportTab}>
         <Ico name="doc" size={15} /> Export CSV
       </WButton>
     ),

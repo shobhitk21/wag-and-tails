@@ -1,11 +1,18 @@
 /* Session for both consoles, backed by a real JWT.
-   The signed-in account and its token are kept together in localStorage and
-   the token is replayed to the API as `Authorization: Bearer <token>` on
-   every request. A 7-day-expiring token is issued by POST /api/auth/login
-   after real password verification (backend/src/modules/users/auth.routes.js);
-   nothing here trusts the client's own claim about who it is. */
+
+   The signed-in account and its tokens are kept together in localStorage and
+   the access token is replayed as `Authorization: Bearer <token>` on every
+   request. POST /api/auth/login issues it after real password verification
+   (backend/src/modules/users/auth.routes.js); nothing here trusts the client's
+   own claim about who it is.
+
+   The access token lasts 15 minutes. The api-client swaps it for a fresh one
+   using the refresh token whenever it expires and calls back here through
+   onSessionChange so the rotated pair is written to storage — otherwise a
+   reload would replay a refresh token the server has already retired and the
+   whole session would be revoked as a suspected leak. */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { configureApi } from '@wag/api-client';
+import { configureApi, api } from '@wag/api-client';
 
 const AuthContext = createContext(null);
 
@@ -23,11 +30,20 @@ export function AuthProvider({ surface, baseUrl, children }) {
     }
   });
 
-  /* Point the client at the API and hand it the current token. */
-  configureApi({ baseUrl, token: session?.token ?? null });
+  /* Point the client at the API and hand it the current tokens. */
+  configureApi({
+    baseUrl,
+    token: session?.token ?? null,
+    refresh: session?.refreshToken ?? null
+  });
 
   useEffect(() => {
-    configureApi({ token: session?.token ?? null });
+    configureApi({
+      token: session?.token ?? null,
+      refresh: session?.refreshToken ?? null,
+      /* null means the refresh itself was rejected: the session is over. */
+      onSessionChange: (next) => setSession(next)
+    });
     try {
       if (session) localStorage.setItem(storageKey, JSON.stringify(session));
       else localStorage.removeItem(storageKey);
@@ -40,9 +56,21 @@ export function AuthProvider({ surface, baseUrl, children }) {
     () => ({
       user: session?.user ?? null,
       surface,
-      /* Called with the { user, token } the login endpoint returns. */
-      signIn: (user, token) => setSession({ user, token }),
-      signOut: () => setSession(null)
+      /* Called with the { user, token, refreshToken } login returns. */
+      signIn: (user, token, refreshToken) => setSession({ user, token, refreshToken }),
+      /* After someone edits their own profile. The sidebar reads the name and
+         role from here, so without this the console would keep showing the old
+         name until the next sign-in. Tokens are untouched — this is the same
+         session, not a new one. */
+      updateUser: (patch) =>
+        setSession((prev) => (prev ? { ...prev, user: { ...prev.user, ...patch } } : prev)),
+      signOut: () => {
+        /* Best effort: tell the server to revoke the family, but sign out
+           locally regardless — a failed call must not trap someone signed in. */
+        const rt = session?.refreshToken;
+        setSession(null);
+        if (rt) api.auth.logout(rt).catch(() => {});
+      }
     }),
     [session, surface]
   );

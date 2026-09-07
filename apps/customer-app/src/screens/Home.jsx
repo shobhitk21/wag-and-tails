@@ -37,9 +37,23 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <Screen onBrand edges={['top']}>
+      {/* Everything, hero included, lives inside the one scroller: the header
+          is part of the page rather than a fixed bar, so it scrolls away and
+          gives the list the full screen.
+
+          It has to be inside the ScrollView for the overlapping card to work
+          at all. A negative margin on the scroller's *first* child is clipped
+          at its top bound, which was cutting the top off that card while the
+          hero sat outside; with the hero as the first child the card is simply
+          the second one and there is nothing to clip against. */}
+      <Body
+        style={{ backgroundColor: colors.canvas }}
+        horizontalPadding={0}
+        contentStyle={{ paddingTop: 0 }}
+      >
       <View style={{
         backgroundColor: colors.brand[700],
-        paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[6],
+        paddingHorizontal: space[5], paddingTop: space[2], paddingBottom: space[7],
         borderBottomLeftRadius: radii.xl, borderBottomRightRadius: radii.xl
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -104,16 +118,15 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* The hero above is brand-700 and the safe-area container inherits that
-          colour so the status bar strip matches it (the fix for the Build
-          Book's "status bar unreadable on Home" bug — not a repeat of it).
-          Everything from here down needs its own canvas background, or that
-          brand colour would show through the whole rest of the screen. */}
-      <Body
-        style={{ backgroundColor: colors.canvas }}
-        contentStyle={{ paddingTop: 0, marginTop: -space[5] }}
-      >
-        {/* Happening now / idle prompt. */}
+      {/* The card overlapping the hero. On Android paint order follows
+          elevation rather than JSX order, so it needs one to stay on top of
+          the hero it is pulled up over. */}
+      <View style={{
+        paddingHorizontal: space[5],
+        marginTop: -space[6],
+        zIndex: 2,
+        elevation: 4
+      }}>
         {active ? (
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: space[3] }}>
@@ -168,9 +181,16 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Card>
         ) : null}
+      </View>
 
+      {/* The hero is brand-700 and the safe-area container inherits that colour
+          so the status bar strip matches it (the fix for the Build Book's
+          "status bar unreadable on Home" bug — not a repeat of it). The
+          scroller itself is canvas, so once the hero scrolls up past the top
+          the rest of the screen keeps its own background. */}
+      <View style={{ paddingHorizontal: space[5], paddingTop: space[4] }}>
         {/* Book a service. */}
-        <SectionHead title="Book a service" style={{ marginTop: space[5] }} />
+        <SectionHead title="Book a service" />
         <T.Xs style={{ marginTop: -8, marginBottom: space[3] }}>At your home, 7 days a week</T.Xs>
         <View style={{ gap: space[3] }}>
           <Pressable onPress={() => navigation.navigate('BookGroom')}>
@@ -345,6 +365,7 @@ export default function HomeScreen({ navigation }) {
         <Card style={{ marginTop: space[4] }} onPress={() => navigation.navigate('Help')}>
           <Row icon="help" title="Help & support" subtitle="FAQs, booking issues, contact us" chevron />
         </Card>
+      </View>
       </Body>
       <Toast message={toast} />
     </Screen>

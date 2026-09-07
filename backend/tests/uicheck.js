@@ -58,14 +58,30 @@ async function auditConsole(browser, base, routes, label) {
     if (m.type() === 'error') errors.push(m.text());
   });
 
-  /* Sign in once — the session persists in localStorage for every route after. */
+  /* Sign in once — the session persists in localStorage for every route after.
+     The password is really checked now, so fill it via the demo-credentials
+     button rather than submitting an empty field. */
   await page.goto(base, { waitUntil: 'networkidle0', timeout: 30000 });
+
+  const fillBtn = await page.evaluateHandle(() =>
+    [...document.querySelectorAll('button')].find((b) => b.innerText.includes('Fill demo credentials')) ?? null);
+  if (fillBtn.asElement()) {
+    await fillBtn.asElement().click();
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
   const signinBtn = await page.$('button[type="submit"]');
   if (signinBtn) {
     await signinBtn.click();
-    await page.waitForSelector('.side', { timeout: 15000 });
-    console.log('  ok   signed in');
-    pass += 1;
+    try {
+      await page.waitForSelector('.side', { timeout: 15000 });
+      console.log('  ok   signed in');
+      pass += 1;
+    } catch {
+      const msg = await page.evaluate(() => document.querySelector('.errbox')?.innerText ?? 'no error shown');
+      console.log(`  FAIL sign-in did not complete — ${msg}`);
+      problems.push(`${label} sign-in: ${msg}`);
+    }
   } else {
     console.log('  FAIL sign-in form did not render');
     problems.push(`${label}: no sign-in form`);
@@ -75,8 +91,8 @@ async function auditConsole(browser, base, routes, label) {
     errors.length = 0;
     try {
       await page.goto(base + route, { waitUntil: 'networkidle0', timeout: 30000 });
-      /* Wait for the screen to finish its fetch rather than catching the spinner. */
-      await page.waitForFunction(() => !document.querySelector('.spinner'), { timeout: 15000 });
+      /* Wait for the screen to finish its fetch rather than catching the loader. */
+      await page.waitForFunction(() => !document.querySelector('.wspin'), { timeout: 15000 });
 
       const report = await page.evaluate(() => {
         const title = document.querySelector('.topbar__t')?.textContent?.trim() ?? null;

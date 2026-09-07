@@ -87,10 +87,32 @@ async function snapshot(page) {
 async function step(page, name, { expect = [], tap, wait = 1200 } = {}) {
   try {
     if (tap) {
+      /* Wait for the control to exist before reaching for it. A screen that
+         fetches its options on mount has nothing to tap for a moment, and
+         tapping into that gap is what a fixed pause was really covering up. */
+      await page.waitForFunction(
+        (needle) => document.body.innerText.includes(needle),
+        { timeout: 10000, polling: 100 }, tap
+      ).catch(() => {});
+
       const tapped = await tapText(page, tap);
       if (!tapped) throw new Error(`could not tap "${tap}"`);
     }
-    await sleep(wait);
+
+    /* Wait for what the step is looking for rather than sleeping a fixed
+       amount. A screen that fetches on mount takes as long as the round trip
+       takes, and a hard-coded pause is a race the suite loses on a slow API
+       and wastes time on a fast one — `wait` is now a ceiling, not a delay.
+       Steps with nothing to expect still fall back to the fixed pause. */
+    if (expect.length) {
+      await page.waitForFunction((needles) => {
+        const text = document.body.innerText.toLowerCase();
+        return needles.every((n) => text.includes(n.toLowerCase()));
+      }, { timeout: Math.max(wait, 8000), polling: 100 }, expect).catch(() => {});
+    } else {
+      await sleep(wait);
+    }
+
     const snap = await snapshot(page);
 
     /* Some labels render through textTransform: uppercase (the eyebrow style),

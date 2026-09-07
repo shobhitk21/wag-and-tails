@@ -19,7 +19,10 @@ import {
 
 export function ModeSwitch({ mode, onChange, groomingBadge, walkingBadge }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: space[5], marginBottom: space[4] }}>
+    <View style={{
+      flexDirection: 'row', gap: 8, paddingHorizontal: space[5], marginBottom: space[4],
+      backgroundColor: colors.canvas, zIndex: 10, elevation: 3
+    }}>
       {[
         ['grooming', 'Grooming', 'scissors', groomingBadge],
         ['walking', 'Walking', 'route', walkingBadge]
@@ -292,7 +295,10 @@ export function JobsScreen({ navigation, mode, setMode }) {
     <Screen>
       <View style={{
         paddingHorizontal: space[5], paddingTop: space[3], paddingBottom: space[2],
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: colors.canvas,
+        /* pinned above the scroll view — see the note on AppBar in Shell.jsx */
+        zIndex: 10, elevation: 3
       }}>
         <View>
           <T.Eyebrow>Partner</T.Eyebrow>

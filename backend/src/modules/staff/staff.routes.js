@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { many, one } from '../../db/pool.js';
-import { asyncHandler } from '../../middleware/error.js';
+import { asyncHandler, httpError } from '../../middleware/error.js';
+import { validate } from '../../middleware/validate.js';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -82,6 +84,35 @@ router.get(
         messagesHandled: account.handled_today
       }
     });
+  })
+);
+
+
+/* PATCH /api/staff/profile — edit your own account.
+
+   Deliberately narrow: name and shift only. Role and active status are
+   somebody else's decision and live under /api/admin/staff, or anyone could
+   promote themselves here. Email is the login identifier and changing it is a
+   credential change, not a profile edit. */
+router.patch(
+  '/profile',
+  validate(z.object({
+    name: z.string().trim().min(1, 'Your name cannot be blank').optional(),
+    shift: z.string().trim().optional()
+  })),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw httpError(401, 'Not signed in.');
+
+    const fields = Object.entries(req.body).filter(([k]) => k === 'name' || k === 'shift');
+    if (!fields.length) throw httpError(400, 'Nothing to update.');
+
+    const set = fields.map(([k], i) => `${k} = $${i + 2}`).join(', ');
+    const account = await one(
+      `UPDATE staff_users SET ${set} WHERE id = $1
+       RETURNING code, name, email, role, shift, handled_today, art_from, art_to`,
+      [req.user.id, ...fields.map(([, v]) => v)]
+    );
+    res.json({ account });
   })
 );
 

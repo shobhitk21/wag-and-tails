@@ -11,7 +11,7 @@ import {
   Screen, AppBar, Body, Dock, Toast,
   Card, Button, Row, KV, Divider, Chip, Field, Pill, CareNote, Banner,
   Ring, AddRing, PhotoTile, T, Ico, Loading, ErrorState, EmptyState,
-  Stars, useApi
+  Stars, useApi, useToast, Sheet
 } from '@wag/ui-native';
 
 export function PetsScreen({ navigation }) {
@@ -182,6 +182,52 @@ export function PetScreen({ route, navigation }) {
 export function PetVaccinesScreen({ route, navigation }) {
   const { id } = route.params;
   const { data, loading, error, reload } = useApi(() => appApi.pets.get(id), [id]);
+  const [toast, setToast] = useToast();
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: '', givenOn: '', dueOn: '' });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState(null);
+
+  /* `editing` doubles as the sheet's open flag: null is closed, 'new' is an
+     add, a record object is an edit. One piece of state rather than three
+     that could disagree about what the sheet is showing. */
+  function open(record) {
+    setEditing(record ?? 'new');
+    setProblem(null);
+    setForm(record
+      ? { name: record.name, givenOn: record.given_on ?? '', dueOn: record.due_on ?? '' }
+      : { name: '', givenOn: '', dueOn: '' });
+  }
+
+  async function save() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (editing === 'new') await appApi.pets.addVaccine(id, form);
+      else await appApi.pets.updateVaccine(id, editing.id, form);
+      setEditing(null);
+      setToast(editing === 'new' ? 'Record added.' : 'Record updated.');
+      reload();
+    } catch (err) {
+      setProblem(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try {
+      await appApi.pets.removeVaccine(id, editing.id);
+      setEditing(null);
+      setToast('Record removed.');
+      reload();
+    } catch (err) {
+      setProblem(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (loading) return <Screen><AppBar title="Vaccinations" onBack={navigation.goBack} /><Loading /></Screen>;
   if (error) {
@@ -195,10 +241,27 @@ export function PetVaccinesScreen({ route, navigation }) {
 
   return (
     <Screen>
-      <AppBar title="Vaccinations" subtitle={data.pet.name} onBack={navigation.goBack} />
+      <AppBar
+        title="Vaccinations"
+        subtitle={data.pet.name}
+        onBack={navigation.goBack}
+        right={(
+          <Pressable onPress={() => open(null)} hitSlop={10} accessibilityLabel="Add a record">
+            <Ico name="plus" size={20} color={colors.ink[1]} />
+          </Pressable>
+        )}
+      />
       <Body>
+        {data.vaccines.length === 0 ? (
+          <EmptyState
+            icon="syringe"
+            title="No records yet"
+            sub={`Add ${data.pet.name}’s vaccinations so we know what is due.`}
+          />
+        ) : null}
+
         {data.vaccines.map((v) => (
-          <Card key={v.name} style={{ marginBottom: space[3] }}>
+          <Card key={v.id} style={{ marginBottom: space[3] }} onPress={() => open(v)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
               <View style={{
                 width: 40, height: 40, borderRadius: radii.md,
@@ -210,7 +273,10 @@ export function PetVaccinesScreen({ route, navigation }) {
               </View>
               <View style={{ flex: 1 }}>
                 <T.H3>{v.name}</T.H3>
-                <T.Xs style={{ marginTop: 3 }}>Given {v.given_on} · due {v.due_on}</T.Xs>
+                <T.Xs style={{ marginTop: 3 }}>
+                  {v.given_on ? `Given ${v.given_on}` : 'Not given yet'}
+                  {v.due_on ? ` · due ${v.due_on}` : ''}
+                </T.Xs>
               </View>
               <Pill tone={v.up_to_date ? 'ok' : 'warn'}>
                 {v.up_to_date ? 'Up to date' : 'Due'}
@@ -218,14 +284,60 @@ export function PetVaccinesScreen({ route, navigation }) {
             </View>
           </Card>
         ))}
+
         <Banner tone="info" icon="info" style={{ marginTop: space[3] }}>
-          Records are entered by you or your vet. Editing them is not wired in this build.
+          Records are entered by you or your vet. Tap one to edit it. Whether a
+          record counts as up to date is worked out from its due date, so the
+          reminders on your home screen always match what is here.
         </Banner>
       </Body>
+
+      <Sheet
+        visible={editing !== null}
+        title={editing === 'new' ? 'Add a record' : 'Edit record'}
+        onClose={() => (busy ? null : setEditing(null))}
+        footer={(
+          <View style={{ gap: space[2] }}>
+            <Button
+              title={busy ? 'Saving…' : 'Save record'}
+              onPress={save}
+              disabled={busy || !form.name.trim()}
+            />
+            {editing !== 'new' && editing !== null ? (
+              <Button title="Remove record" variant="danger" onPress={remove} disabled={busy} />
+            ) : null}
+          </View>
+        )}
+      >
+        <Field
+          label="Vaccine"
+          value={form.name}
+          placeholder="Rabies"
+          onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
+        />
+        <Field
+          label="Given on"
+          value={form.givenOn}
+          placeholder="12 Mar 2026"
+          style={{ marginTop: space[4] }}
+          onChangeText={(v) => setForm((f) => ({ ...f, givenOn: v }))}
+        />
+        <Field
+          label="Next due"
+          value={form.dueOn}
+          placeholder="12 Mar 2027"
+          style={{ marginTop: space[4] }}
+          onChangeText={(v) => setForm((f) => ({ ...f, dueOn: v }))}
+        />
+        {problem ? (
+          <Banner tone="danger" icon="alert" style={{ marginTop: space[4] }}>{problem}</Banner>
+        ) : null}
+      </Sheet>
+
+      <Toast message={toast} />
     </Screen>
   );
 }
-
 export function VisitScreen({ route, navigation }) {
   const { petId, code } = route.params;
   const { data, loading, error, reload } = useApi(() => appApi.pets.visit(petId, code), [petId, code]);

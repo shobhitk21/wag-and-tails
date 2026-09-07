@@ -5,6 +5,9 @@ import { many, one } from '../../db/pool.js';
 import { asyncHandler, httpError } from '../../middleware/error.js';
 import { validate } from '../../middleware/validate.js';
 import { signToken } from '../../utils/jwt.js';
+import {
+  issueRefreshToken, rotateRefreshToken, revokeRefreshToken, RefreshError
+} from '../../utils/tokens.js';
 
 const router = Router();
 
@@ -96,8 +99,57 @@ router.post(
     );
 
     const token = signToken({ sub: user.id, role: user.role, code: user.code });
+    const refreshToken = await issueRefreshToken({
+      subjectType: 'staff', subjectId: user.id, userAgent: req.get('user-agent')
+    });
     const { password_hash, failed_logins, locked_until, ...safe } = user;
-    res.json({ user: safe, token });
+    res.json({ user: safe, token, refreshToken });
+  })
+);
+
+/* POST /api/auth/refresh
+   Exchanges a refresh token for a new access + refresh pair. Deliberately not
+   behind webAuth: the whole point is that it works once the access token has
+   expired. The account is re-read so a deactivated user cannot refresh. */
+router.post(
+  '/refresh',
+  validate(z.object({ refreshToken: z.string().min(1) })),
+  asyncHandler(async (req, res) => {
+    let rotated;
+    try {
+      rotated = await rotateRefreshToken(req.body.refreshToken, {
+        userAgent: req.get('user-agent')
+      });
+    } catch (err) {
+      if (err instanceof RefreshError) throw httpError(401, err.message);
+      throw err;
+    }
+    if (rotated.subjectType !== 'staff') throw httpError(401, 'Sign in again.');
+
+    const user = await one(
+      `SELECT id, code, name, email, role, shift, active, art_from, art_to
+       FROM staff_users WHERE id = $1`,
+      [rotated.subjectId]
+    );
+    if (!user?.active) throw httpError(401, 'That account is no longer active.');
+
+    res.json({
+      user,
+      token: signToken({ sub: user.id, role: user.role, code: user.code }),
+      refreshToken: rotated.token
+    });
+  })
+);
+
+/* POST /api/auth/logout — revokes the whole family, so signing out on one
+   device ends the session everywhere it was shared. Always 200: telling a
+   caller their token was unknown would leak which tokens exist. */
+router.post(
+  '/logout',
+  validate(z.object({ refreshToken: z.string().optional() })),
+  asyncHandler(async (req, res) => {
+    await revokeRefreshToken(req.body.refreshToken);
+    res.json({ ok: true });
   })
 );
 

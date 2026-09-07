@@ -268,4 +268,53 @@ router.post(
   })
 );
 
+
+/* POST /api/bookings/:id/reschedule — move a booking to another slot.
+
+   The slot has to be one the business actually offers, so it is checked
+   against booking_slots rather than accepted as free text: a booking sitting
+   on a slot that no longer exists cannot be staffed.
+
+   A rescheduled job goes back to the partner as a changed job, so anything
+   already finished or cancelled is refused — there is nothing to move. */
+router.post(
+  '/:id/reschedule',
+  validate(z.object({
+    dateLabel: z.string().trim().min(1, 'Pick a date'),
+    slot: z.string().trim().min(1, 'Pick a slot')
+  })),
+  asyncHandler(async (req, res) => {
+    const { dateLabel, slot } = req.body;
+
+    const booking = await one('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
+    if (!booking) throw httpError(404, 'No booking with that ID.');
+    if (booking.status === 'Completed' || booking.status === 'Cancelled') {
+      throw httpError(409, `A ${booking.status.toLowerCase()} booking cannot be rescheduled.`);
+    }
+
+    const known = await one(
+      'SELECT id FROM booking_slots WHERE label = $1 AND enabled = TRUE',
+      [slot]
+    );
+    if (!known) throw httpError(400, `"${slot}" is not a slot we currently offer.`);
+
+    const was = booking.scheduled_label;
+    const updated = await one(
+      `UPDATE bookings SET scheduled_label = $2, date_label = $3, slot_label = $4
+       WHERE id = $1 RETURNING *`,
+      [booking.id, `${dateLabel}, ${slot}`, dateLabel, slot]
+    );
+
+    /* The activity trail is what the customer and the partner both read, so
+       the old time is recorded rather than quietly overwritten. */
+    await one(
+      `INSERT INTO booking_activity (booking_id, title, detail, state)
+       VALUES ($1, 'Booking rescheduled', $2, 'done') RETURNING id`,
+      [booking.id, `${was} → ${updated.scheduled_label} · by ${req.user?.name ?? 'staff'}`]
+    );
+
+    res.json({ booking: updated });
+  })
+);
+
 export default router;

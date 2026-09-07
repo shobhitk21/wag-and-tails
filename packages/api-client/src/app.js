@@ -1,15 +1,21 @@
 /* The mobile apps' half of the API client.
-   Shares configureApi/ApiError with the web client in ./index.js; the only
-   difference is the identity header (`x-app-user`) and the /api/app routes. */
+   Shares the shape of the web client in ./index.js; the difference is only
+   which routes it calls (/api/app/...).
+
+   Identity used to be a plain `x-app-user: customer:C1041` header, which any
+   caller could forge. It is a signed JWT now, refreshed transparently the same
+   way the consoles do it. */
 
 let baseUrl = 'http://localhost:4000';
-let appUser = null;
+let authToken = null;
+let refreshToken = null;
+let onSession = null;
 
-export function configureAppApi({ baseUrl: url, user } = {}) {
+export function configureAppApi({ baseUrl: url, token, refresh, onSessionChange } = {}) {
   if (url !== undefined) baseUrl = url || baseUrl;
-  if (user !== undefined) {
-    appUser = user ? `${user.role}:${user.id}` : null;
-  }
+  if (token !== undefined) authToken = token;
+  if (refresh !== undefined) refreshToken = refresh;
+  if (onSessionChange !== undefined) onSession = onSessionChange;
 }
 
 export class AppApiError extends Error {
@@ -21,10 +27,10 @@ export class AppApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+async function send(path, { method = 'GET', body } = {}) {
   const headers = {};
   if (body !== undefined) headers['content-type'] = 'application/json';
-  if (appUser) headers['x-app-user'] = appUser;
+  if (authToken) headers['authorization'] = `Bearer ${authToken}`;
 
   let res;
   try {
@@ -41,6 +47,42 @@ async function request(path, { method = 'GET', body } = {}) {
 
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  return { res, data };
+}
+
+/* One shared in-flight refresh: refresh tokens are single-use, so two
+   concurrent 401s must not each try to spend the same one. */
+let inFlightRefresh = null;
+
+async function refreshSession() {
+  if (!refreshToken) return false;
+  if (!inFlightRefresh) {
+    inFlightRefresh = (async () => {
+      const { res, data } = await send('/api/app/auth/refresh', {
+        method: 'POST', body: { refreshToken }
+      });
+      if (!res.ok) {
+        authToken = null;
+        refreshToken = null;
+        onSession?.(null);
+        return false;
+      }
+      authToken = data.token;
+      refreshToken = data.refreshToken;
+      onSession?.({ user: data.user, token: data.token, refreshToken: data.refreshToken });
+      return true;
+    })().finally(() => { inFlightRefresh = null; });
+  }
+  return inFlightRefresh;
+}
+
+async function request(path, opts = {}) {
+  let { res, data } = await send(path, opts);
+
+  if (res.status === 401 && refreshToken && !path.startsWith('/api/app/auth/refresh')) {
+    if (await refreshSession()) ({ res, data } = await send(path, opts));
+  }
+
   if (!res.ok) {
     throw new AppApiError(data?.error ?? `Request failed (${res.status}).`, res.status, data?.details);
   }
@@ -53,7 +95,8 @@ export const appApi = {
   auth: {
     demoAccounts: (role) => request(`/api/app/auth/demo-accounts?role=${role}`),
     requestOtp: (phone, role) => request('/api/app/auth/request-otp', { method: 'POST', body: { phone, role } }),
-    verifyOtp: (phone, code, role) => request('/api/app/auth/verify-otp', { method: 'POST', body: { phone, code, role } })
+    verifyOtp: (phone, code, role) => request('/api/app/auth/verify-otp', { method: 'POST', body: { phone, code, role } }),
+    logout: (refresh) => request('/api/app/auth/logout', { method: 'POST', body: { refreshToken: refresh } })
   },
 
   customer: {
@@ -73,7 +116,13 @@ export const appApi = {
     visit: (petId, code) => request(`/api/app/pets/${petId}/visits/${code}`),
     create: (body) => request('/api/app/pets', { method: 'POST', body }),
     update: (id, body) => request(`/api/app/pets/${id}`, { method: 'PATCH', body }),
-    breeds: () => request('/api/app/pets/meta/breeds')
+    breeds: () => request('/api/app/pets/meta/breeds'),
+    addVaccine: (petId, body) =>
+      request(`/api/app/pets/${petId}/vaccines`, { method: 'POST', body }),
+    updateVaccine: (petId, vaccineId, body) =>
+      request(`/api/app/pets/${petId}/vaccines/${vaccineId}`, { method: 'PATCH', body }),
+    removeVaccine: (petId, vaccineId) =>
+      request(`/api/app/pets/${petId}/vaccines/${vaccineId}`, { method: 'DELETE' })
   },
 
   bookings: {

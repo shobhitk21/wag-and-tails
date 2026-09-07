@@ -127,3 +127,37 @@ partners.post(
     res.json({ partner });
   })
 );
+
+/* PATCH /api/partners/:id — the partner detail screen's editable fields.
+
+   `area` is checked against service_areas because the coverage counts on the
+   admin console are computed by joining partners.area to that table: a typo
+   here would not fail, it would silently make the partner invisible to the
+   area they actually work in. */
+partners.patch(
+  '/:id',
+  requireAdmin,
+  validate(z.object({
+    area: z.string().trim().min(1).optional(),
+    phone: z.string().trim().min(6).optional(),
+    kind: z.enum(['Groomer', 'Walker']).optional()
+  })),
+  asyncHandler(async (req, res) => {
+    const allowed = ['area', 'phone', 'kind'];
+    const fields = Object.entries(req.body).filter(([k]) => allowed.includes(k));
+    if (!fields.length) throw httpError(400, 'Nothing to update.');
+
+    if (req.body.area) {
+      const area = await one('SELECT id FROM service_areas WHERE name = $1', [req.body.area]);
+      if (!area) throw httpError(400, `"${req.body.area}" is not a service area.`);
+    }
+
+    const set = fields.map(([k], i) => `${k} = $${i + 2}`).join(', ');
+    const partner = await one(
+      `UPDATE partners SET ${set} WHERE id = $1 RETURNING *`,
+      [req.params.id, ...fields.map(([, v]) => v)]
+    );
+    if (!partner) throw httpError(404, 'No partner with that ID.');
+    res.json({ partner });
+  })
+);

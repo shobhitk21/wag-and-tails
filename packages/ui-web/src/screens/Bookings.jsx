@@ -5,6 +5,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '@wag/api-client';
 import { useApi, useToast } from '../useApi.js';
 import { Loading, ErrorBox, Toast } from '../WebShell.jsx';
+import { useConfirm } from '../ConfirmDialog.jsx';
+import { useFormDialog } from '../FormDialog.jsx';
 import { Avatar, partnerArt } from '../Brand.jsx';
 import { Ico } from '../Icon.jsx';
 import {
@@ -18,7 +20,9 @@ const FILTERS = [
   ['whatsapp', 'From WhatsApp']
 ];
 
-export function BookingsScreen({ renderPage }) {
+/* `canCreate` is the staff portal only — taking a booking on a customer's
+   behalf is staff work, and the admin console's sidebar has no route for it. */
+export function BookingsScreen({ renderPage, canCreate = false }) {
   const [filter, setFilter] = useState('all');
   const navigate = useNavigate();
   const { data, error, loading, reload } = useApi(() => api.bookings.list(filter), [filter]);
@@ -69,6 +73,11 @@ export function BookingsScreen({ renderPage }) {
   return renderPage({
     title: 'Bookings',
     sub: data ? `${data.total} total` : undefined,
+    actions: canCreate ? (
+      <WButton variant="primary" onClick={() => navigate('/bookings/new')}>
+        <Ico name="plus" size={16} /> New booking
+      </WButton>
+    ) : undefined,
     body
   });
 }
@@ -80,6 +89,48 @@ export function BookingScreen({ renderPage, canCancel = true }) {
   const { data, error, loading, reload } = useApi(() => api.bookings.get(id), [id]);
   const partners = useApi(() => api.partners.list(), []);
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+  const [openForm, formDialog] = useFormDialog();
+
+  /* Slots come from the API rather than being listed here, because which
+     ones are open is an operations decision made on the Service areas screen
+     — offering a closed slot would book a job nobody is rostered for. */
+  async function reschedule(booking) {
+    let slots = [];
+    try {
+      const { slots: rows } = await api.admin.areas();
+      slots = rows.filter((row) => row.enabled).map((row) => ({ value: row.label, label: row.label }));
+    } catch {
+      /* Bookings staff cannot read the admin screens. They can still move a
+         booking within the slots this one could have been booked into. */
+      slots = booking.slot_label ? [{ value: booking.slot_label, label: booking.slot_label }] : [];
+    }
+    if (!slots.length) {
+      setToast('No booking slots are open at the moment.');
+      return;
+    }
+
+    const moved = await openForm({
+      title: `Reschedule ${booking.id}`,
+      body: `Currently ${booking.scheduled_label}. The customer and the partner both see the change.`,
+      submitLabel: 'Move booking',
+      fields: [
+        {
+          name: 'dateLabel', label: 'Date', wide: true,
+          value: booking.date_label ?? 'Tomorrow',
+          placeholder: 'Tomorrow', hint: 'As the customer should read it — “Tomorrow”, “Sat 14 Mar”'
+        },
+        {
+          name: 'slot', label: 'Slot', type: 'select', wide: true,
+          value: booking.slot_label ?? slots[0].value, options: slots
+        }
+      ],
+      submit: (v) => api.bookings.reschedule(booking.id, v.dateLabel, v.slot)
+    });
+    if (!moved) return;
+    setToast(`Moved to ${moved.booking.scheduled_label}.`);
+    reload();
+  }
 
   async function act(fn, message) {
     setBusy(true);
@@ -170,7 +221,16 @@ export function BookingScreen({ renderPage, canCancel = true }) {
                 <WButton
                   sm
                   disabled={busy}
-                  onClick={() => act(() => api.bookings.unassign(b.id), 'Published as an open job.')}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Take this job off ${b.partner_name}?`,
+                      body: 'It goes back to the open pool for any partner to claim, '
+                        + 'and they lose it immediately.',
+                      confirmLabel: 'Reassign',
+                      tone: 'danger'
+                    });
+                    if (ok) act(() => api.bookings.unassign(b.id), 'Published as an open job.');
+                  }}
                 >
                   Reassign
                 </WButton>
@@ -199,7 +259,8 @@ export function BookingScreen({ renderPage, canCancel = true }) {
 
           <WCard title="Actions" className={data.confirmation ? 'mt4' : ''}>
             <div className="col g2">
-              <WButton style={{ justifyContent: 'flex-start' }} onClick={() => setToast('Reschedule is not wired yet.')}>
+              <WButton style={{ justifyContent: 'flex-start' }} disabled={busy}
+                onClick={() => reschedule(b)}>
                 <Ico name="cal" size={15} /> Reschedule
               </WButton>
               <WButton style={{ justifyContent: 'flex-start' }} onClick={() => setToast(`Calling ${b.customer_name}…`)}>
@@ -210,7 +271,18 @@ export function BookingScreen({ renderPage, canCancel = true }) {
                   variant="danger"
                   style={{ justifyContent: 'flex-start' }}
                   disabled={busy}
-                  onClick={() => act(() => api.bookings.cancel(b.id), 'Booking cancelled.')}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Cancel booking ${b.id}?`,
+                      body: `${b.service_label} for ${b.pet_name}, ${b.scheduled_label}. `
+                        + 'This cannot be undone — the customer keeps the record but the '
+                        + 'slot is released.',
+                      confirmLabel: 'Cancel booking',
+                      cancelLabel: 'Keep it',
+                      tone: 'danger'
+                    });
+                    if (ok) act(() => api.bookings.cancel(b.id), 'Booking cancelled.');
+                  }}
                 >
                   <Ico name="close" size={15} /> Cancel booking
                 </WButton>
@@ -236,6 +308,8 @@ export function BookingScreen({ renderPage, canCancel = true }) {
         </div>
       </div>
       <Toast message={toast} />
+      {confirmDialog}
+      {formDialog}
     </>
   );
 

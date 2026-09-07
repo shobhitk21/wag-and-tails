@@ -1,6 +1,6 @@
 /* Schedule, earnings, payouts, reviews, documents, notifications and account. */
 import { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import appApi from '@wag/api-client/app';
 import { colors, type, radii, space, inr } from '@wag/theme';
 import {
@@ -274,6 +274,12 @@ export function NotificationsScreen({ navigation }) {
 
 export function PartnerAccountScreen({ navigation }) {
   const { user, signOut } = useAuth();
+
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'You will need your number and a new code to get back in.', [
+      { text: 'Stay signed in', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: signOut }
+    ]);
   const { data, loading } = useApi(() => appApi.partner.home(), []);
 
   if (loading) return <Screen><AppBar title="Account" /><Loading /></Screen>;
@@ -330,7 +336,7 @@ export function PartnerAccountScreen({ navigation }) {
             onPress={() => navigation.navigate('Notifications')} />
         </Card>
 
-        <Button title="Sign out" variant="secondary" onPress={signOut} style={{ marginTop: space[5] }} />
+        <Button title="Sign out" variant="secondary" onPress={confirmSignOut} style={{ marginTop: space[5] }} />
         <T.Xs style={{ textAlign: 'center', marginTop: space[4] }}>
           Wag &amp; Tails Partner · EST. 2022
         </T.Xs>

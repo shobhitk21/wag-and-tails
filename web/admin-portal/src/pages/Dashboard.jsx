@@ -124,7 +124,7 @@ export default function Dashboard({ renderPage }) {
     title: 'Dashboard',
     sub: 'All channels',
     actions: (
-      <WButton onClick={() => setToast('Date range picker is not wired yet.')}>
+      <WButton onClick={() => setToast('The KPI tiles and charts are the reporting snapshot, not counted rows — there is no date column to filter them by yet.')}>
         <Ico name="cal" size={15} /> This month
       </WButton>
     ),

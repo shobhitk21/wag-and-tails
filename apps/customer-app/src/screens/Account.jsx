@@ -1,6 +1,6 @@
 /* Account, addresses, payment methods, wallet, offers, notifications, help. */
 import { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import appApi from '@wag/api-client/app';
 import { colors, type, radii, space, inr } from '@wag/theme';
 import {
@@ -11,6 +11,12 @@ import {
 
 export function AccountScreen({ navigation }) {
   const { user, signOut } = useAuth();
+
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'You will need your number and a new code to get back in.', [
+      { text: 'Stay signed in', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: signOut }
+    ]);
   const { data, error, loading, reload } = useApi(() => appApi.customer.account(), []);
 
   if (loading) return <Screen><AppBar title="Account" /><Loading /></Screen>;
@@ -76,7 +82,7 @@ export function AccountScreen({ navigation }) {
             onPress={() => navigation.navigate('Help')} />
         </Card>
 
-        <Button title="Sign out" variant="secondary" onPress={signOut}
+        <Button title="Sign out" variant="secondary" onPress={confirmSignOut}
           style={{ marginTop: space[5] }} />
         <T.Xs style={{ textAlign: 'center', marginTop: space[4] }}>
           Wag &amp; Tails · EST. 2022
